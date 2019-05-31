@@ -14,7 +14,7 @@
 /* Constants */
 #define BUFFER_SIZE 1000
 #define PORT_NUMBER 7800
-#define HOST_NAME "172.26.36.44"
+#define HOST_NAME "172.26.37.44"
 #define USER_NAME "dongweiw\n"
 #define G_VALUE 15
 #define P_VALUE 97
@@ -23,10 +23,31 @@
 /* Function Prototype */
 int mod_func(int base, int exponent, int modulus);
 
+// use to calclate the (g)b mod p or (g)ba mod p
+int compute(int g, int m, int p) {
+
+	// initialise root and result for return
+	int r;
+	int result = 1;
+
+	//while (g)b or (g)ba greater than 0
+	while (m > 0) {
+		r = m % 2;
+
+		// find the root and calculate the result
+		if (r == 1){
+			result = (result*g) % p;
+		}
+		g = g*g % p;
+
+		m = m / 2;
+	}
+	return result;
+}
+
 
 int main(int argc, char ** argv)
 {
-    printf("DEBUG");
     int sockfd, portno, n;
     struct sockaddr_in serv_addr;
     struct hostent * server;
@@ -73,7 +94,9 @@ int main(int argc, char ** argv)
 
     /* Do processing */
     /* Send username */
-    n = write(sockfd, USER_NAME, strlen(buffer));
+    strcpy(buffer, USER_NAME);
+    printf("Your username is %s", buffer);
+    n = write(sockfd, buffer, strlen(buffer));
     if (n < 0)
     {
         perror("ERROR writing to socket");
@@ -92,14 +115,16 @@ int main(int argc, char ** argv)
     b_in_hex[2] = '\0';
     strcpy(hex_value, strstr(dh_buffer, "= ") + 2);
     strncpy(b_in_hex, hex_value, 2);
+    printf("hex is %s\n", hex_value );
 
     /* Convert first two hexadecimal digits to an integer */
     int b = strtol(b_in_hex, NULL, 16);
+    printf("The value of b is %d\n", b);
 
     /* Compute g^b mod p */
     int g = G_VALUE;
     int p = P_VALUE;
-    int gbmodp = mod_func(g, b, p);
+    int gbmodp = compute(g, b, p);
     char gbmodp_str[BUFFER_SIZE];
     sprintf(gbmodp_str, "%d\n", gbmodp);
 
@@ -120,7 +145,7 @@ int main(int argc, char ** argv)
 
     /* Receive value g^a mod p */
     int gamodp = atoi(buffer);
-    printf("g^a mod p is %d\n", gamodp);
+    printf("Received g^a mod p is %d\n", gamodp);
 
     /* Calculate g^ab mod p */
     int gbamodp = mod_func(gamodp, b, p);
@@ -144,7 +169,7 @@ int main(int argc, char ** argv)
       exit(EXIT_FAILURE);
     }
 
-    printf("The final buffer is %s\n", buffer);
+    printf("The result from server: %s\n", buffer);
 
     close(sockfd);
 
