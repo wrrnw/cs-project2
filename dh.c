@@ -25,7 +25,6 @@ int mod_func(int g, int exp, int p);
 
 
 
-
 int main(int argc, char ** argv)
 {
     int sockfd, portno, n;
@@ -75,7 +74,6 @@ int main(int argc, char ** argv)
     /* Do processing */
     /* Send username */
     strcpy(buffer, USER_NAME);
-    printf("Your username is %s", buffer);
     n = write(sockfd, buffer, strlen(buffer));
     if (n < 0)
     {
@@ -95,17 +93,14 @@ int main(int argc, char ** argv)
     b_in_hex[2] = '\0';
     strcpy(hex_value, strstr(dh_buffer, "= ") + 2);
     strncpy(b_in_hex, hex_value, 2);
-    printf("%s", dh_buffer);
 
     /* Convert first two hexadecimal digits to an integer */
     int b = strtol(b_in_hex, NULL, 16);
-    printf("The value of b is %d\n", b);
 
     /* Compute g^b mod p */
     int g = G_VALUE;
     int p = P_VALUE;
     int gbmodp = mod_func(g, b, p);
-    printf("The value of gbmodp is %d\n", gbmodp);
     char gbmodp_str[10];
     sprintf(gbmodp_str, "%d\n", gbmodp);
 
@@ -168,9 +163,9 @@ int mod_func(int g, int exp, int p) {
 		r = exp % 2;
 
 		if (r == 1){
-			result = (result*g) % p;
+			result = (result * g) % p;
 		}
-		g = g*g % p;
+		g = g * g % p;
 
 		exp = exp / 2;
 	}
