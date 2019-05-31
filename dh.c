@@ -11,12 +11,13 @@
 #include <unistd.h>
 #include <math.h>
 
+/* Constants */
 #define BUFFER_SIZE 1000
 #define PORT_NUMBER 7800
 #define HOST_NAME "172.26.36.44"
 #define USER_NAME "dongweiw\n"
-#define G_VALUE 9
-#define P_VALUE 23 //Just pick a small prime number for practice purpose
+#define G_VALUE 15
+#define P_VALUE 97
 #define COMMAND "openssl sha256 dh.c"
 
 /* Function Prototype */
@@ -25,6 +26,7 @@ int mod_func(int base, int exponent, int modulus);
 
 int main(int argc, char ** argv)
 {
+    printf("DEBUG");
     int sockfd, portno, n;
     struct sockaddr_in serv_addr;
     struct hostent * server;
@@ -69,32 +71,32 @@ int main(int argc, char ** argv)
     }
 
 
-
     /* Do processing */
     /* Send username */
-    strcpy(buffer, USER_NAME);
-    printf("The buffer currently is: %s\n", buffer);
-
-    n = write(sockfd, buffer, strlen(buffer));
+    n = write(sockfd, USER_NAME, strlen(buffer));
     if (n < 0)
     {
         perror("ERROR writing to socket");
         exit(0);
     }
 
-    /* read b value */
+    /* Read b value */
     FILE *fp;
     fp = popen(COMMAND, "r");
     char dh_buffer[BUFFER_SIZE];
     fgets(dh_buffer, BUFFER_SIZE, fp);
 
+    /* Get the first two hexadecimal digits */
     char hex_value[BUFFER_SIZE];
     char b_in_hex[3];
     b_in_hex[2] = '\0';
     strcpy(hex_value, strstr(dh_buffer, "= ") + 2);
     strncpy(b_in_hex, hex_value, 2);
 
+    /* Convert first two hexadecimal digits to an integer */
     int b = strtol(b_in_hex, NULL, 16);
+
+    /* Compute g^b mod p */
     int g = G_VALUE;
     int p = P_VALUE;
     int gbmodp = mod_func(g, b, p);
@@ -116,16 +118,33 @@ int main(int argc, char ** argv)
       exit(EXIT_FAILURE);
     }
 
-    /* Receive value A = g^a mod p */
-    int A = atoi(buffer);
+    /* Receive value g^a mod p */
+    int gamodp = atoi(buffer);
+    printf("g^a mod p is %d\n", gamodp);
 
-    /* Calculate A ^ b mod p (ie. g^ab mod p) */
-    int gbamodp = mod_func(A, b, p);
+    /* Calculate g^ab mod p */
+    int gbamodp = mod_func(gamodp, b, p);
     char gbamodp_str[BUFFER_SIZE];
     sprintf(gbamodp_str, "%d\n", gbamodp);
     buffer[n] = 0;
 
-    printf("Buffer is %s\n", buffer);
+    /* Send g^ab mod p */
+    n = write(sockfd, gbamodp_str, strlen(gbamodp_str));
+    if (n < 0)
+    {
+      perror("ERROR writing to socket");
+      exit(EXIT_FAILURE);
+    }
+
+    /* if succeeded */
+    n = read(sockfd, buffer, 255);
+    if (n < 0)
+    {
+      perror("ERROR reading from socket");
+      exit(EXIT_FAILURE);
+    }
+
+    printf("The final buffer is %s\n", buffer);
 
     close(sockfd);
 
@@ -134,7 +153,9 @@ int main(int argc, char ** argv)
 
 
 
-// Taken and adapted from https://www.mtholyoke.edu/courses/quenell/s2003/ma139/js/powermod.html's javascript
+/* Adapted from the js code in
+ * https://www.mtholyoke.edu/courses/quenell/s2003/ma139/js/powermod.html
+ */
 int mod_func(int base, int exponent, int modulus)
 {
   if ((base < 1) || (exponent < 0) || (modulus < 1))
