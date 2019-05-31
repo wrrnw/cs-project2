@@ -1,10 +1,10 @@
-
 /* Header file */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "sha256.h"
 
+/* Constants */
 #define MAX_PASSWORD_LENGTH 10000
 #define START_ASCII_NUMBER 32 // from space character
 #define END_ASCII_NUMBER 126  // to ~ character
