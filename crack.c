@@ -8,13 +8,24 @@
 #define MAX_PASSWORD_LENGTH 10000
 #define START_ASCII_NUMBER 32 // from space character
 #define END_ASCII_NUMBER 126  // to ~ character
+#define UPPER_CHAR_START_ASCII_NUMBER 65
+#define UPPER_CHAR_END_ASCII_NUMBER 90
+#define LOWER_CHAR_START_ASCII_NUMBER 97
+#define LOWER_CHAR_END_ASCII_NUMBER 122
+#define NUMBER_CHAR_START_ASCII_NUMBER 48
+#define NUMBER_CHAR_END_ASCII_NUMBER 57
 #define FOUR_DIGITS_PASSWORD_LEN 4
 #define SIX_DIGITS_PASSWORD_LEN 6
+#define FOUR_DIGITS_PASSWORD_START_ID 1
+#define SIX_DIGITS_PASSWORD_START_ID 11
 
 
 /* Function Prototype */
 void runWithNoArg();
+void runWithOneArg(char *argv[]);
 void runWithTwoArgs(char *argv[]);
+int checkIfPasswordMatched(SHA256_CTX *ctx, BYTE *guess_in_BYTE, size_t len,
+   BYTE *buffer, BYTE *hash);
 
 
 int main(int argc, char *argv[]) {
@@ -43,9 +54,8 @@ int main(int argc, char *argv[]) {
 /* Case 1: If crack is running with no argument */
 void runWithNoArg() {
   FILE *pwd4sha256_fp = fopen("pwd4sha256", "r");
-  BYTE hash4[SHA256_BLOCK_SIZE];
   FILE *pwd6sha256_fp = fopen("pwd6sha256", "r");
-  BYTE hash6[SHA256_BLOCK_SIZE];
+  BYTE hash[SHA256_BLOCK_SIZE];
 
   // Each specific digits in passwords
   int first_digit, second_digit, third_digit, fourth_digit, fifth_digit, sixth_digit;
@@ -54,11 +64,11 @@ void runWithNoArg() {
   BYTE buffer[SHA256_BLOCK_SIZE];
 
   // 4-digit passwords start from 1 to 10
-  int curr_hash_ID = 1;
-  // Keep reading the pwd4sha256 file until we get all 10 hashes
-  while (fread(hash4, sizeof(BYTE), SHA256_BLOCK_SIZE, pwd4sha256_fp)) {
+  int curr_hash_ID = FOUR_DIGITS_PASSWORD_START_ID;
+  // For each password in hash file, generate all possibilities(95^4)
+  while (fread(hash, sizeof(BYTE), SHA256_BLOCK_SIZE, pwd4sha256_fp)) {
 
-    SHA256_CTX ctx4;
+    SHA256_CTX ctx;
 
     // Brute-force generating 4-digits passwords
     char *guess = malloc(FOUR_DIGITS_PASSWORD_LEN * sizeof(char));
@@ -71,14 +81,12 @@ void runWithNoArg() {
             guess[2] = third_digit;
             guess[3] = fourth_digit;
 
-            BYTE *byte_guess = (BYTE *)guess;
+            BYTE *guess_in_BYTE = (BYTE *)guess;
 
-            sha256_init(&ctx4);
-            sha256_update(&ctx4, byte_guess, FOUR_DIGITS_PASSWORD_LEN);
-            sha256_final(&ctx4, buffer);
-
-            // Print when we find passwords matching hashes
-            if (!memcmp(hash4, buffer, SHA256_BLOCK_SIZE)) {
+            int password_is_matched = checkIfPasswordMatched(&ctx, guess_in_BYTE,
+              FOUR_DIGITS_PASSWORD_LEN, buffer, hash);
+            // If current guess matches hash password
+            if(password_is_matched) {
               printf("%s %d\n", guess, curr_hash_ID);
             }
           }
@@ -88,15 +96,16 @@ void runWithNoArg() {
     curr_hash_ID++;
   }
 
+
   // 6-digit passwords start from 11 to 30
-  curr_hash_ID = 11;
-  // Keep reading the pwd6sha256 file until we get all hashes
-  while (fread(hash6, sizeof(BYTE), SHA256_BLOCK_SIZE, pwd6sha256_fp))
+  curr_hash_ID = SIX_DIGITS_PASSWORD_START_ID;
+  // For each password in hash file, generate all possibilities(95^6)
+  while (fread(hash, sizeof(BYTE), SHA256_BLOCK_SIZE, pwd6sha256_fp))
   {
-    SHA256_CTX ctx6;
+    SHA256_CTX ctx;
 
     char *guess = malloc(SIX_DIGITS_PASSWORD_LEN * sizeof(char));
-    // FOR loops to generate all possible 6-digit passwords
+    // Brute-force generating 6-digits passwords
     for (first_digit = START_ASCII_NUMBER; first_digit < END_ASCII_NUMBER; first_digit++) {
       for (second_digit = START_ASCII_NUMBER; second_digit < END_ASCII_NUMBER; second_digit++) {
         for (third_digit = START_ASCII_NUMBER; third_digit < END_ASCII_NUMBER; third_digit++) {
@@ -111,15 +120,12 @@ void runWithNoArg() {
                 guess[5] = sixth_digit;
 
                 // Change format from array of char to BYTE
-                BYTE *byte_guess = (BYTE *)guess;
+                BYTE *guess_in_BYTE = (BYTE *)guess;
 
-                sha256_init(&ctx6);
-                sha256_update(&ctx6, byte_guess, SIX_DIGITS_PASSWORD_LEN);
-                sha256_final(&ctx6, buffer);
-
-                // Print when we find passwords matching hashes
-                if (!memcmp(hash6, buffer, SHA256_BLOCK_SIZE))
-                {
+                int password_is_matched = checkIfPasswordMatched(&ctx, guess_in_BYTE,
+                  SIX_DIGITS_PASSWORD_LEN, buffer, hash);
+                // If current guess matches hash password
+                if(password_is_matched) {
                   printf("%s %d\n", guess, curr_hash_ID);
                 }
               }
@@ -139,8 +145,105 @@ void runWithNoArg() {
 
 
 
-
+/* Case 2: If crack is running with one argument
+ * For generating good guesses. I follow a common human strategy to create
+ * passwords, which is the frequency of appearence of characters is:
+ * Lower case characters > Upper case characters > Numbers > Symbols
+ * And we find in ASCII table that:
+ * Lowercase characters start with 97(a) and end with 122(z)
+ * Uppercase characters start with 65(A) and end with 90(Z)
+ * Numbers start with 48(0) and end with 57(9)
+ * Other ASCII chars from 32 to 126 except above are symbols
+ */
 void runWithOneArg(char *argv[]) {
+  int number_of_guesses = atoi(argv[1]);
+  int has_guessed = 0;
+  // Each specific digits in passwords
+  int first_digit, second_digit, third_digit, fourth_digit, fifth_digit, sixth_digit;
+
+
+  char *guess = malloc(SIX_DIGITS_PASSWORD_LEN * sizeof(char));
+
+  // First: Generating 6-digits passwords including only lowercase characters
+  for (first_digit = LOWER_CHAR_START_ASCII_NUMBER; first_digit < LOWER_CHAR_END_ASCII_NUMBER; first_digit++) {
+    for (second_digit = LOWER_CHAR_START_ASCII_NUMBER; second_digit < LOWER_CHAR_END_ASCII_NUMBER; second_digit++) {
+      for (third_digit = LOWER_CHAR_START_ASCII_NUMBER; third_digit < LOWER_CHAR_END_ASCII_NUMBER; third_digit++) {
+        for (fourth_digit = LOWER_CHAR_START_ASCII_NUMBER; fourth_digit < LOWER_CHAR_END_ASCII_NUMBER; fourth_digit++) {
+          for (fifth_digit = LOWER_CHAR_START_ASCII_NUMBER; fifth_digit < LOWER_CHAR_END_ASCII_NUMBER; fifth_digit++) {
+            for (sixth_digit = LOWER_CHAR_START_ASCII_NUMBER; sixth_digit < LOWER_CHAR_END_ASCII_NUMBER; sixth_digit++) {
+              guess[0] = first_digit;
+              guess[1] = second_digit;
+              guess[2] = third_digit;
+              guess[3] = fourth_digit;
+              guess[4] = fifth_digit;
+              guess[5] = sixth_digit;
+
+              printf("%s\n", guess);
+              has_guessed++;
+              if (has_guessed == number_of_guesses)
+              {
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Second: Generating 6-digits passwords including only uppercase characters
+  for (first_digit = UPPER_CHAR_START_ASCII_NUMBER; first_digit < UPPER_CHAR_END_ASCII_NUMBER; first_digit++) {
+    for (second_digit = UPPER_CHAR_START_ASCII_NUMBER; second_digit < UPPER_CHAR_END_ASCII_NUMBER; second_digit++) {
+      for (third_digit = UPPER_CHAR_START_ASCII_NUMBER; third_digit < UPPER_CHAR_END_ASCII_NUMBER; third_digit++) {
+        for (fourth_digit = UPPER_CHAR_START_ASCII_NUMBER; fourth_digit < UPPER_CHAR_END_ASCII_NUMBER; fourth_digit++) {
+          for (fifth_digit = UPPER_CHAR_START_ASCII_NUMBER; fifth_digit < UPPER_CHAR_END_ASCII_NUMBER; fifth_digit++) {
+            for (sixth_digit = UPPER_CHAR_START_ASCII_NUMBER; sixth_digit < UPPER_CHAR_END_ASCII_NUMBER; sixth_digit++) {
+              guess[0] = first_digit;
+              guess[1] = second_digit;
+              guess[2] = third_digit;
+              guess[3] = fourth_digit;
+              guess[4] = fifth_digit;
+              guess[5] = sixth_digit;
+
+              printf("%s\n", guess);
+              has_guessed++;
+              if (has_guessed == number_of_guesses)
+              {
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Third: Generating 6-digits passwords including only numbers
+  for (first_digit = NUMBER_CHAR_START_ASCII_NUMBER; first_digit < NUMBER_CHAR_END_ASCII_NUMBER; first_digit++) {
+    for (second_digit = NUMBER_CHAR_START_ASCII_NUMBER; second_digit < NUMBER_CHAR_END_ASCII_NUMBER; second_digit++) {
+      for (third_digit = NUMBER_CHAR_START_ASCII_NUMBER; third_digit < NUMBER_CHAR_END_ASCII_NUMBER; third_digit++) {
+        for (fourth_digit = NUMBER_CHAR_START_ASCII_NUMBER; fourth_digit < NUMBER_CHAR_END_ASCII_NUMBER; fourth_digit++) {
+          for (fifth_digit = NUMBER_CHAR_START_ASCII_NUMBER; fifth_digit < NUMBER_CHAR_END_ASCII_NUMBER; fifth_digit++) {
+            for (sixth_digit = NUMBER_CHAR_START_ASCII_NUMBER; sixth_digit < NUMBER_CHAR_END_ASCII_NUMBER; sixth_digit++) {
+              guess[0] = first_digit;
+              guess[1] = second_digit;
+              guess[2] = third_digit;
+              guess[3] = fourth_digit;
+              guess[4] = fifth_digit;
+              guess[5] = sixth_digit;
+
+              printf("%s\n", guess);
+              has_guessed++;
+              if (has_guessed == number_of_guesses)
+              {
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
 }
 
@@ -149,7 +252,7 @@ void runWithOneArg(char *argv[]) {
 
 
 
-/* Case 3: If crack is running run with two arguments */
+/* Case 3: If crack is running with two arguments */
 void runWithTwoArgs(char *argv[]) {
   // Open sha256 file. Use "rb" because of opening non-text file
   FILE *sha_fp = fopen(argv[2], "rb");
@@ -193,11 +296,11 @@ void runWithTwoArgs(char *argv[]) {
     sha256_update(&ctx, byte_pwd, strlen(buffer));
     sha256_final(&ctx, hash);
 
-    int curr_hash_ID = 1;
+    int curr_hash_ID = FOUR_DIGITS_PASSWORD_START_ID;
     for (int i = 0; i < bytes_number; i = i + SHA256_BLOCK_SIZE)
     {
 
-      // Print when we find passwords matching hashes
+      // If current guess matches hash password
       if (!memcmp(hashes + i, hash, SHA256_BLOCK_SIZE))
       {
         printf("%s %d\n", buffer, curr_hash_ID);
@@ -206,3 +309,20 @@ void runWithTwoArgs(char *argv[]) {
     }
   }
 }
+
+
+
+
+/* Check if current guess matches hash password
+ * Return 1 if matches, 0 if not matches
+ */
+int checkIfPasswordMatched(SHA256_CTX *ctx, BYTE *guess_in_BYTE, size_t len,
+   BYTE *buffer, BYTE *hash) {
+     sha256_init(ctx);
+     sha256_update(ctx, guess_in_BYTE, len);
+     sha256_final(ctx, buffer);
+     if (!memcmp(hash, buffer, SHA256_BLOCK_SIZE)) {
+       return 1;
+     }
+     return 0;
+   }
