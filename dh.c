@@ -21,29 +21,9 @@
 #define COMMAND "openssl sha256 dh.c"
 
 /* Function Prototype */
-int mod_func(int base, int exponent, int modulus);
+int mod_func(int g, int exp, int p);
 
-// use to calclate the (g)b mod p or (g)ba mod p
-int compute(int g, int m, int p) {
 
-	// initialise root and result for return
-	int r;
-	int result = 1;
-
-	//while (g)b or (g)ba greater than 0
-	while (m > 0) {
-		r = m % 2;
-
-		// find the root and calculate the result
-		if (r == 1){
-			result = (result*g) % p;
-		}
-		g = g*g % p;
-
-		m = m / 2;
-	}
-	return result;
-}
 
 
 int main(int argc, char ** argv)
@@ -115,7 +95,7 @@ int main(int argc, char ** argv)
     b_in_hex[2] = '\0';
     strcpy(hex_value, strstr(dh_buffer, "= ") + 2);
     strncpy(b_in_hex, hex_value, 2);
-    printf("hex is %s\n", hex_value );
+    printf("%s", dh_buffer);
 
     /* Convert first two hexadecimal digits to an integer */
     int b = strtol(b_in_hex, NULL, 16);
@@ -124,8 +104,9 @@ int main(int argc, char ** argv)
     /* Compute g^b mod p */
     int g = G_VALUE;
     int p = P_VALUE;
-    int gbmodp = compute(g, b, p);
-    char gbmodp_str[BUFFER_SIZE];
+    int gbmodp = mod_func(g, b, p);
+    printf("The value of gbmodp is %d\n", gbmodp);
+    char gbmodp_str[10];
     sprintf(gbmodp_str, "%d\n", gbmodp);
 
     /* Send g^b mod p */
@@ -145,11 +126,11 @@ int main(int argc, char ** argv)
 
     /* Receive value g^a mod p */
     int gamodp = atoi(buffer);
-    printf("Received g^a mod p is %d\n", gamodp);
+    //printf("Received g^a mod p is %d\n", gamodp);
 
     /* Calculate g^ab mod p */
     int gbamodp = mod_func(gamodp, b, p);
-    char gbamodp_str[BUFFER_SIZE];
+    char gbamodp_str[10];
     sprintf(gbamodp_str, "%d\n", gbamodp);
     buffer[n] = 0;
 
@@ -178,24 +159,20 @@ int main(int argc, char ** argv)
 
 
 
-/* Adapted from the js code in
- * https://www.mtholyoke.edu/courses/quenell/s2003/ma139/js/powermod.html
- */
-int mod_func(int base, int exponent, int modulus)
-{
-  if ((base < 1) || (exponent < 0) || (modulus < 1))
-  {
-    return 0;
-  }
-  int result = 1;
-  while (exponent > 0)
-  {
-    if ((exponent % 2) == 1)
-    {
-      result = (result * base) % modulus;
-    }
-    base = (base * base) % modulus;
-    exponent = floor(exponent / 2);
-  }
-  return result;
+// Calculate g ^ exp mod p
+int mod_func(int g, int exp, int p) {
+	int r;
+	int result = 1;
+
+	while (exp > 0) {
+		r = exp % 2;
+
+		if (r == 1){
+			result = (result*g) % p;
+		}
+		g = g*g % p;
+
+		exp = exp / 2;
+	}
+	return result;
 }
